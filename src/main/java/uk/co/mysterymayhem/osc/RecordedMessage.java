@@ -1,7 +1,8 @@
 package uk.co.mysterymayhem.osc;
 
-import java.io.Serializable;
+import java.io.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -9,12 +10,12 @@ import java.util.Objects;
  * Created by Mysteryem on 31/07/2021.
  */
 public class RecordedMessage implements Serializable {
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     private final long offsetTime;
     private final String address;
-    private final List<Object> arguments;
-    private final CharSequence argumentTypes;
+    transient private List<Object> arguments;
+    transient private CharSequence argumentTypes;
 
     public RecordedMessage(long offsetTime, String address, List<Object> arguments, CharSequence argumentTypes) {
         if (!(argumentTypes instanceof Serializable)) {
@@ -70,4 +71,34 @@ public class RecordedMessage implements Serializable {
                 ", argumentTypes=" + argumentTypes +
                 '}';
     }
+
+    // There will likely be hundreds of thousands of these instances serialized so optimising is a good idea
+    // So make sure we're not serializing some weird List or CharSequence subclasses that take up extra filesize
+    // TODO: See if serializing a mapping from address to an addressId alongside the RecordedMessages saves space (when taking into account the gz compression)
+    private void writeObject(ObjectOutputStream oos)
+            throws IOException {
+        oos.defaultWriteObject();
+
+        Object[] argumentsArray = this.getArguments().toArray();
+        CharSequence argumentTypes = this.getArgumentTypes();
+        if (argumentTypes.getClass() != String.class) {
+            argumentTypes = argumentTypes.toString();
+        }
+
+        oos.writeObject(argumentsArray);
+        oos.writeObject(argumentTypes);
+    }
+
+    private void readObject(ObjectInputStream ois)
+            throws ClassNotFoundException, IOException {
+        ois.defaultReadObject();
+
+        Object[] argumentsArray = (Object[])ois.readObject();
+        String argumentTypes = (String)ois.readObject();
+
+        this.arguments = Arrays.asList(argumentsArray);
+        this.argumentTypes = argumentTypes;
+    }
+
+
 }
