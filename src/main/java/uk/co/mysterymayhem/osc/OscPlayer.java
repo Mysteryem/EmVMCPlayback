@@ -21,8 +21,8 @@ public class OscPlayer {
     private final Timer timer;
     private final boolean hasMessages;
 
-    private boolean hasStarted = false;
-    private boolean hasStopped = false;
+    private boolean started = false;
+    private boolean stopped = false;
 
     public OscPlayer(int portOut, List<RecordedMessage> recordedMessages, long repeatPeriodMillis) throws IOException {
         this(new InetSocketAddress("localhost", portOut), recordedMessages, repeatPeriodMillis, false);
@@ -85,7 +85,7 @@ public class OscPlayer {
     }
 
     public void start() {
-        if (this.hasStarted) {
+        if (this.started) {
             throw new IllegalStateException("Already started");
         }
         if (this.hasMessages) {
@@ -94,19 +94,19 @@ public class OscPlayer {
                     .map(recordedMessage -> new RecordedMessageTimerTask(recordedMessage, this.oscPortOut))
                     .forEach(rmtt -> this.timer.scheduleAtFixedRate(rmtt, rmtt.getRecordedMessage().getOffsetTime(), this.repeatPeriod));
         }
-        this.hasStarted = true;
+        this.started = true;
     }
 
     public void stop() {
-        if (this.hasStopped) {
+        if (this.stopped) {
             throw new IllegalStateException("Already stopped");
         }
-        if (!this.hasStarted) {
+        if (!this.started) {
             throw new IllegalStateException("Hasn't started yet");
         }
         if (this.hasMessages) {
             this.timer.cancel();
         }
-        this.hasStopped = true;
+        this.stopped = true;
     }
 }
