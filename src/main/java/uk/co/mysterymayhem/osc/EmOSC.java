@@ -1,13 +1,12 @@
 package uk.co.mysterymayhem.osc;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import uk.co.mysterymayhem.osc.vmc.VmcRecorder;
 
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 import java.util.zip.GZIPInputStream;
@@ -65,26 +64,18 @@ public class EmOSC {
         playback(record(portIn, recordingTimeSeconds), portOut, marionetteAddress);
     }
 
+    @SuppressWarnings("unchecked")
     private static List<RecordedMessage> loadFromFile(String file) throws IOException {
         GZIPInputStream gzipInputStream = new GZIPInputStream(Files.newInputStream(Paths.get(file)));
-        //TODO: Get rid of the whole JSON side of things entirely, some binary file format is all that's needed, maybe even using Java's Serializable?
-        ObjectMapper objectMapper = new ObjectMapper();
-        List<RecordedMessage> recordedMessages = objectMapper.readValue(gzipInputStream, new TypeReference<List<RecordedMessage>>() {
-        });
-        for (RecordedMessage r : recordedMessages) {
-            List<Object> arguments = r.getArguments();
-            ArrayList<Object> fixedArguments = new ArrayList<>();
-            for (Object o : arguments) {
-                if (o instanceof Double) {
-                    fixedArguments.add(((Double) o).floatValue());
-                } else {
-                    fixedArguments.add(o);
-                }
-            }
-            r.setArguments(fixedArguments);
+        ObjectInputStream objectInputStream = new ObjectInputStream(gzipInputStream);
+        try {
+            List<RecordedMessage> recordedMessages = (List<RecordedMessage>)objectInputStream.readObject();
+            objectInputStream.close();
+            gzipInputStream.close();
+            return recordedMessages;
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
         }
-        gzipInputStream.close();
-        return recordedMessages;
     }
 
     private static List<RecordedMessage> record(int portIn, int recordingTimeSeconds) throws IOException {
@@ -107,11 +98,13 @@ public class EmOSC {
     }
 
     private static void saveToFile(List<RecordedMessage> recordedMessages, String file) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] jsonBytes = objectMapper.writeValueAsBytes(recordedMessages);
         GZIPOutputStream gzipOutputStream = new GZIPOutputStream(Files.newOutputStream(Paths.get(file)));
-        gzipOutputStream.write(jsonBytes);
-        gzipOutputStream.finish();
+        ObjectOutputStream objectOutputStream = new ObjectOutputStream(gzipOutputStream);
+        objectOutputStream.writeObject(recordedMessages);
+        objectOutputStream.flush();
+        objectOutputStream.close();
+        gzipOutputStream.flush();
+        gzipOutputStream.close();
     }
 
     private static void playback(List<RecordedMessage> recordedMessages, int portOut, String marionetteAddress) throws IOException {

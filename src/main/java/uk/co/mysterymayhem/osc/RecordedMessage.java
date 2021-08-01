@@ -1,22 +1,28 @@
 package uk.co.mysterymayhem.osc;
 
+import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * Created by Mysteryem on 31/07/2021.
  */
-public class RecordedMessage {
-    private long offsetTime;
-    private String address;
-    private List<Object> arguments;
-    private CharSequence argumentTypes;
+public class RecordedMessage implements Serializable {
+    private static final long serialVersionUID = 1L;
 
-    // For json
-    private RecordedMessage() {
-    }
+    private final long offsetTime;
+    private final String address;
+    private final List<Object> arguments;
+    private final CharSequence argumentTypes;
 
     public RecordedMessage(long offsetTime, String address, List<Object> arguments, CharSequence argumentTypes) {
+        if (!(argumentTypes instanceof Serializable)) {
+            argumentTypes = argumentTypes.toString();
+        }
+        if (arguments.getClass() != ArrayList.class) {
+            arguments = new ArrayList<>(arguments);
+        }
         this.offsetTime = offsetTime;
         this.address = address;
         this.arguments = arguments;
@@ -27,32 +33,16 @@ public class RecordedMessage {
         return offsetTime;
     }
 
-    public void setOffsetTime(long offsetTime) {
-        this.offsetTime = offsetTime;
-    }
-
     public String getAddress() {
         return address;
-    }
-
-    public void setAddress(String address) {
-        this.address = address;
     }
 
     public List<Object> getArguments() {
         return arguments;
     }
 
-    public void setArguments(List<Object> arguments) {
-        this.arguments = arguments;
-    }
-
     public CharSequence getArgumentTypes() {
         return argumentTypes;
-    }
-
-    public void setArgumentTypes(CharSequence argumentTypes) {
-        this.argumentTypes = argumentTypes;
     }
 
     @Override
