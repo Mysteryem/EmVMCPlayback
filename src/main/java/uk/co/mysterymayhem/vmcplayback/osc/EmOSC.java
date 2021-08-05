@@ -1,6 +1,6 @@
-package uk.co.mysterymayhem.osc;
+package uk.co.mysterymayhem.vmcplayback.osc;
 
-import uk.co.mysterymayhem.osc.vmc.VmcRecorder;
+import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcRecorder;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;

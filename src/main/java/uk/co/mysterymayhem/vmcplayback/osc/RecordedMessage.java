@@ -1,4 +1,4 @@
-package uk.co.mysterymayhem.osc;
+package uk.co.mysterymayhem.vmcplayback.osc;
 
 import java.io.*;
 import java.util.ArrayList;

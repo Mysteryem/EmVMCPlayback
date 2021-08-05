@@ -1,4 +1,4 @@
-package uk.co.mysterymayhem.osc;
+package uk.co.mysterymayhem.vmcplayback.osc;
 
 import com.illposed.osc.OSCMessage;
 import com.illposed.osc.OSCMessageEvent;

@@ -1,4 +1,4 @@
-package uk.co.mysterymayhem.osc;
+package uk.co.mysterymayhem.vmcplayback.osc;
 
 import com.illposed.osc.MessageSelector;
 import com.illposed.osc.transport.udp.OSCPortIn;
