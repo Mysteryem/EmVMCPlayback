@@ -9,7 +9,7 @@ import java.util.ArrayList;
 /**
  * Created by Mysteryem on 31/07/2021.
  */
-public class EmOscMessageListener implements OSCMessageListener {
+public class RecordingMessageListener implements OSCMessageListener {
 
     private int messageCount;
     private long startTime;

@@ -17,7 +17,7 @@ import java.util.zip.GZIPOutputStream;
 /**
  * Created by Mysteryem on 31/07/2021.
  */
-public class EmOSC {
+public class VmcPlayback {
     private String fileName;
     private int portIn;
     private int portOut;
@@ -26,19 +26,19 @@ public class EmOSC {
     // Currently unused as "localhost" is being assumed
     private String marionetteAddress;
 
-    public EmOSC(int portIn, int recordingDurationSeconds, String fileName) {
+    public VmcPlayback(int portIn, int recordingDurationSeconds, String fileName) {
         this.portIn = portIn;
         this.recordingDurationSeconds = recordingDurationSeconds;
         this.fileName = fileName;
     }
 
-    public EmOSC(String fileName, int portOut, String marionetteAddress) {
+    public VmcPlayback(String fileName, int portOut, String marionetteAddress) {
         this.fileName = fileName;
         this.portOut = portOut;
         this.marionetteAddress = marionetteAddress;
     }
 
-    public EmOSC(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress) {
+    public VmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress) {
         this.portIn = portIn;
         this.portOut = portOut;
         this.recordingDurationSeconds = recordingDurationSeconds;
@@ -52,13 +52,13 @@ public class EmOSC {
         try {
             switch (args[0].toLowerCase()) {
                 case "record":
-                    EmOSC.recordToFile(args);
+                    VmcPlayback.recordToFile(args);
                     break;
                 case "play":
-                    EmOSC.playFromFile(args);
+                    VmcPlayback.playFromFile(args);
                     break;
                 case "inout":
-                    EmOSC.recordAndPlayback(args);
+                    VmcPlayback.recordAndPlayback(args);
                     break;
                 default:
                     throw new IllegalArgumentException("Unrecognised argument '" + args[0] + '"');
@@ -76,12 +76,12 @@ public class EmOSC {
         int portIn = Integer.parseInt(args[2]);
         int recordingTimeSeconds = Integer.parseInt(args[3]);
 
-        EmOSC emOSC = new EmOSC(portIn, recordingTimeSeconds, fileName);
+        VmcPlayback vmcPlayback = new VmcPlayback(portIn, recordingTimeSeconds, fileName);
 
-        EmOSC.recordingCountdown();
-        List<RecordedMessage> recordedMessages = emOSC.record();
+        VmcPlayback.recordingCountdown();
+        List<RecordedMessage> recordedMessages = vmcPlayback.record();
 
-        emOSC.saveToFile(recordedMessages);
+        vmcPlayback.saveToFile(recordedMessages);
     }
 
     private static void playFromFile(String[] args) throws IOException {
@@ -89,13 +89,13 @@ public class EmOSC {
         int portOut = Integer.parseInt(args[2]);
         String marionetteAddress = args.length > 3 ? args[3] : "localhost";
 
-        EmOSC emOSC = new EmOSC(fileName, portOut, marionetteAddress);
+        VmcPlayback vmcPlayback = new VmcPlayback(fileName, portOut, marionetteAddress);
 
-        List<RecordedMessage> recordedMessages = emOSC.loadFromFile();
+        List<RecordedMessage> recordedMessages = vmcPlayback.loadFromFile();
 
-        OscPlayer oscPlayer = emOSC.startPlayback(recordedMessages);
+        OscPlayer oscPlayer = vmcPlayback.startPlayback(recordedMessages);
 
-        EmOSC.stopPlaybackOnUserInput(oscPlayer);
+        VmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
 
     private static void recordAndPlayback(String[] args) throws IOException, InterruptedException {
@@ -104,15 +104,15 @@ public class EmOSC {
         int recordingTimeSeconds = Integer.parseInt(args[3]);
         String marionetteAddress = args.length > 4 ? args[4] : "localhost";
 
-        EmOSC emOSC = new EmOSC(portIn, portOut, recordingTimeSeconds, marionetteAddress);
+        VmcPlayback vmcPlayback = new VmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress);
 
-        EmOSC.recordingCountdown();
+        VmcPlayback.recordingCountdown();
 
-        List<RecordedMessage> recordedMessages = emOSC.record();
+        List<RecordedMessage> recordedMessages = vmcPlayback.record();
 
-        OscPlayer oscPlayer = emOSC.startPlayback(recordedMessages);
+        OscPlayer oscPlayer = vmcPlayback.startPlayback(recordedMessages);
 
-        EmOSC.stopPlaybackOnUserInput(oscPlayer);
+        VmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
 
     private static void stopPlaybackOnUserInput(OscPlayer player) {

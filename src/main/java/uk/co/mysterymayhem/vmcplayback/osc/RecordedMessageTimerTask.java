@@ -32,7 +32,7 @@ public class RecordedMessageTimerTask extends TimerTask {
         }
     }
 
-    public RecordedMessage getRecordedMessage() {
-        return recordedMessage;
+    public long getDelayMillis() {
+        return this.recordedMessage.getOffsetTime();
     }
 }

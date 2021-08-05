@@ -15,16 +15,16 @@ import java.util.List;
  */
 public class OscRecorder {
 
-    private final EmOscMessageListener emOscMessageListener;
+    private final RecordingMessageListener recordingMessageListener;
     private final OSCPortIn oscPortIn;
-    private boolean hasStarted = false;
-    private boolean hasEnded = false;
+    private boolean started = false;
+    private boolean ended = false;
     private long endTime = -1;
 
     public OscRecorder(MessageSelector messageSelector, SocketAddress socketAddress) throws IOException {
-        EmOscMessageListener messageListener = new EmOscMessageListener();
+        RecordingMessageListener messageListener = new RecordingMessageListener();
 
-        this.emOscMessageListener = messageListener;
+        this.recordingMessageListener = messageListener;
         this.oscPortIn = new OSCPortInBuilder()
                 .setSocketAddress(socketAddress)
                 .addPacketListener(OSCPortIn.defaultPacketListener())
@@ -49,34 +49,34 @@ public class OscRecorder {
     }
 
     public void startRecording() {
-        this.emOscMessageListener.startRecording();
+        this.recordingMessageListener.startRecording();
         this.oscPortIn.startListening();
-        this.hasStarted = true;
+        this.started = true;
     }
 
     public List<RecordedMessage> stopRecording() throws IOException {
-        if (this.hasStarted) {
+        if (this.started) {
             this.oscPortIn.stopListening();
             long endTimeMilli = System.currentTimeMillis();
             this.oscPortIn.close();
             this.endTime = endTimeMilli;
-            this.hasEnded = true;
-            return emOscMessageListener.getRecordedMessages();
+            this.ended = true;
+            return recordingMessageListener.getRecordedMessages();
         } else {
             throw new IllegalStateException("Can't stop recording when not started yet");
         }
     }
 
     public long getStartTimeMillis() {
-        if (this.hasStarted) {
-            return this.emOscMessageListener.getStartTime();
+        if (this.started) {
+            return this.recordingMessageListener.getStartTime();
         } else {
             throw new IllegalStateException("Can't get start time when not started yet");
         }
     }
 
     public long getEndTimeMillis() {
-        if (this.hasEnded) {
+        if (this.ended) {
             return this.endTime;
         } else {
             throw new IllegalStateException("Can't get end time when not ended yet");
@@ -84,8 +84,8 @@ public class OscRecorder {
     }
 
     public long getRecordingDurationMillis() {
-        if (this.hasStarted) {
-            if (this.hasEnded) {
+        if (this.started) {
+            if (this.ended) {
                 return this.getEndTimeMillis() - this.getStartTimeMillis();
             } else {
                 throw new IllegalStateException("Can't get recording time when not ended yet");
@@ -96,6 +96,6 @@ public class OscRecorder {
     }
 
     public int getMessageCount() {
-        return emOscMessageListener.getMessageCount();
+        return recordingMessageListener.getMessageCount();
     }
 }

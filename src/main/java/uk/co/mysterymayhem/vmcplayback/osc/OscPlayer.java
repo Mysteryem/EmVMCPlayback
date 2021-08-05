@@ -92,7 +92,7 @@ public class OscPlayer {
             // It might be better to map entirely first and then schedule the tasks
             this.recordedMessages.stream()
                     .map(recordedMessage -> new RecordedMessageTimerTask(recordedMessage, this.oscPortOut))
-                    .forEach(rmtt -> this.timer.scheduleAtFixedRate(rmtt, rmtt.getRecordedMessage().getOffsetTime(), this.repeatPeriod));
+                    .forEach(rmtt -> this.timer.scheduleAtFixedRate(rmtt, rmtt.getDelayMillis(), this.repeatPeriod));
         }
         this.started = true;
     }
