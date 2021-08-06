@@ -15,7 +15,7 @@ To run, either build the jar and add javaosc to the classpath or build the shade
 
 ### Playing
 
-`java -jar EmVMCPlayback-1.0-SNAPSHOT-shaded.jar play <input file> <port to listen on>`
+`java -jar EmVMCPlayback-1.0-SNAPSHOT-shaded.jar play <input file> <port to send to>`
 
 ## Bugs:
 1. Full relative file paths don't work (no ../myrecording.bin.gz)
