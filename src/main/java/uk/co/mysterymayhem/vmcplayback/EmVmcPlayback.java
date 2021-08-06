@@ -17,7 +17,7 @@ import java.util.zip.GZIPOutputStream;
 /**
  * Created by Mysteryem on 31/07/2021.
  */
-public class VmcPlayback {
+public class EmVmcPlayback {
     private String fileName;
     private int portIn;
     private int portOut;
@@ -26,19 +26,19 @@ public class VmcPlayback {
     // Currently unused as "localhost" is being assumed
     private String marionetteAddress;
 
-    public VmcPlayback(int portIn, int recordingDurationSeconds, String fileName) {
+    public EmVmcPlayback(int portIn, int recordingDurationSeconds, String fileName) {
         this.portIn = portIn;
         this.recordingDurationSeconds = recordingDurationSeconds;
         this.fileName = fileName;
     }
 
-    public VmcPlayback(String fileName, int portOut, String marionetteAddress) {
+    public EmVmcPlayback(String fileName, int portOut, String marionetteAddress) {
         this.fileName = fileName;
         this.portOut = portOut;
         this.marionetteAddress = marionetteAddress;
     }
 
-    public VmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress) {
+    public EmVmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress) {
         this.portIn = portIn;
         this.portOut = portOut;
         this.recordingDurationSeconds = recordingDurationSeconds;
@@ -52,13 +52,13 @@ public class VmcPlayback {
         try {
             switch (args[0].toLowerCase()) {
                 case "record":
-                    VmcPlayback.recordToFile(args);
+                    EmVmcPlayback.recordToFile(args);
                     break;
                 case "play":
-                    VmcPlayback.playFromFile(args);
+                    EmVmcPlayback.playFromFile(args);
                     break;
                 case "inout":
-                    VmcPlayback.recordAndPlayback(args);
+                    EmVmcPlayback.recordAndPlayback(args);
                     break;
                 default:
                     throw new IllegalArgumentException("Unrecognised argument '" + args[0] + '"');
@@ -76,12 +76,12 @@ public class VmcPlayback {
         int portIn = Integer.parseInt(args[2]);
         int recordingTimeSeconds = Integer.parseInt(args[3]);
 
-        VmcPlayback vmcPlayback = new VmcPlayback(portIn, recordingTimeSeconds, fileName);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, recordingTimeSeconds, fileName);
 
-        VmcPlayback.recordingCountdown();
-        List<RecordedMessage> recordedMessages = vmcPlayback.record();
+        EmVmcPlayback.recordingCountdown();
+        List<RecordedMessage> recordedMessages = emVmcPlayback.record();
 
-        vmcPlayback.saveToFile(recordedMessages);
+        emVmcPlayback.saveToFile(recordedMessages);
     }
 
     private static void playFromFile(String[] args) throws IOException {
@@ -89,13 +89,13 @@ public class VmcPlayback {
         int portOut = Integer.parseInt(args[2]);
         String marionetteAddress = args.length > 3 ? args[3] : "localhost";
 
-        VmcPlayback vmcPlayback = new VmcPlayback(fileName, portOut, marionetteAddress);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(fileName, portOut, marionetteAddress);
 
-        List<RecordedMessage> recordedMessages = vmcPlayback.loadFromFile();
+        List<RecordedMessage> recordedMessages = emVmcPlayback.loadFromFile();
 
-        OscPlayer oscPlayer = vmcPlayback.startPlayback(recordedMessages);
+        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages);
 
-        VmcPlayback.stopPlaybackOnUserInput(oscPlayer);
+        EmVmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
 
     private static void recordAndPlayback(String[] args) throws IOException, InterruptedException {
@@ -104,15 +104,15 @@ public class VmcPlayback {
         int recordingTimeSeconds = Integer.parseInt(args[3]);
         String marionetteAddress = args.length > 4 ? args[4] : "localhost";
 
-        VmcPlayback vmcPlayback = new VmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress);
 
-        VmcPlayback.recordingCountdown();
+        EmVmcPlayback.recordingCountdown();
 
-        List<RecordedMessage> recordedMessages = vmcPlayback.record();
+        List<RecordedMessage> recordedMessages = emVmcPlayback.record();
 
-        OscPlayer oscPlayer = vmcPlayback.startPlayback(recordedMessages);
+        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages);
 
-        VmcPlayback.stopPlaybackOnUserInput(oscPlayer);
+        EmVmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
 
     private static void stopPlaybackOnUserInput(OscPlayer player) {
