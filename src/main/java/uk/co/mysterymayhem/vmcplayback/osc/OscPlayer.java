@@ -5,18 +5,15 @@ import com.illposed.osc.transport.udp.OSCPortOut;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Timer;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Created by Mysteryem on 31/07/2021.
  */
 public class OscPlayer {
+    protected final OSCPortOut oscPortOut;
     private final List<RecordedMessage> recordedMessages;
-    private final OSCPortOut oscPortOut;
     private final long repeatPeriod;
     private final Timer timer;
     private final boolean hasMessages;
@@ -89,10 +86,7 @@ public class OscPlayer {
             throw new IllegalStateException("Already started");
         }
         if (this.hasMessages) {
-            // It might be better to map entirely first and then schedule the tasks
-            this.recordedMessages.stream()
-                    .map(recordedMessage -> new RecordedMessageTimerTask(recordedMessage, this.oscPortOut))
-                    .forEach(rmtt -> this.timer.scheduleAtFixedRate(rmtt, rmtt.getDelayMillis(), this.repeatPeriod));
+            this.addRecordedMessages();
         }
         this.started = true;
     }
@@ -108,5 +102,16 @@ public class OscPlayer {
             this.timer.cancel();
         }
         this.stopped = true;
+    }
+
+    protected void addRecordedMessages() {
+        // It might be better to map entirely first and then schedule the tasks
+        this.recordedMessages.stream()
+                .map(recordedMessage -> new RecordedMessageTimerTask(recordedMessage, this.oscPortOut))
+                .forEach(rmtt -> this.scheduleTask(rmtt, rmtt.getDelayMillis(), this.repeatPeriod));
+    }
+
+    protected void scheduleTask(TimerTask task, long delayMillis, long repeatPeriodMillis) {
+        this.timer.scheduleAtFixedRate(task, delayMillis, repeatPeriodMillis);
     }
 }

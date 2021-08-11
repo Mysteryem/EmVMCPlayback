@@ -1,16 +1,23 @@
 package uk.co.mysterymayhem.vmcplayback;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import uk.co.mysterymayhem.vmcplayback.osc.GenericMessageSelector;
 import uk.co.mysterymayhem.vmcplayback.osc.OscPlayer;
+import uk.co.mysterymayhem.vmcplayback.osc.OscRecorder;
 import uk.co.mysterymayhem.vmcplayback.osc.RecordedMessage;
+import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcPlayer;
 import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcRecorder;
+import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcUtils;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
+import java.util.function.Predicate;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -18,47 +25,67 @@ import java.util.zip.GZIPOutputStream;
  * Created by Mysteryem on 31/07/2021.
  */
 public class EmVmcPlayback {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EmVmcPlayback.class);
+
+    // Valued arguments
+    private static final String[] ARGUMENT_PORT = {"port"};
+    private static final String[] ARGUMENT_PORT_IN = {"portin"};
+    private static final String[] ARGUMENT_PORT_OUT = {"portout"};
+    private static final String[] ARGUMENT_FILE_NAME = {"file"};
+    private static final String[] ARGUMENT_RECORDING_DURATION = {"duration"};
+    private static final String[] ARGUMENT_MARIONETTE_ADDRESS = {"address"};
+    // Flags
+    // Replace VMC timing messages when playing back recordings
+    private static final String[] FLAG_REPLACE_VMC_TIMING = {"t", "replacevmctiming"};
+    // Unfilter message recording/playback to contain all OSC messages instead of only VMC messages
+    private static final String[] FLAG_ALLOW_ALL_OSC = {"o", "osc", "all"};
+
     private String fileName;
     private int portIn;
     private int portOut;
     private int recordingDurationSeconds;
-    // 'marionette' is VMC terminology
-    // Currently unused as "localhost" is being assumed
+    // 'marionette' is VMC terminology for the receiver of motion data.
     private String marionetteAddress;
+    private boolean allowAllOsc;
 
-    public EmVmcPlayback(int portIn, int recordingDurationSeconds, String fileName) {
+    public EmVmcPlayback(int portIn, int recordingDurationSeconds, String fileName, boolean allowAllOsc) {
         this.portIn = portIn;
         this.recordingDurationSeconds = recordingDurationSeconds;
         this.fileName = fileName;
+        this.allowAllOsc = allowAllOsc;
     }
 
-    public EmVmcPlayback(String fileName, int portOut, String marionetteAddress) {
+    public EmVmcPlayback(String fileName, int portOut, String marionetteAddress, boolean allowAllOsc) {
         this.fileName = fileName;
         this.portOut = portOut;
         this.marionetteAddress = marionetteAddress;
+        this.allowAllOsc = allowAllOsc;
     }
 
-    public EmVmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress) {
+    public EmVmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress, boolean allowAllOsc) {
         this.portIn = portIn;
         this.portOut = portOut;
         this.recordingDurationSeconds = recordingDurationSeconds;
         this.marionetteAddress = marionetteAddress;
+        this.allowAllOsc = allowAllOsc;
     }
 
     public static void main(String[] args) {
         if (args.length == 0) {
             throw new IllegalArgumentException("Missing arguments");
         }
+        Map<String, String> arguments = parseArguments(Arrays.copyOfRange(args, 1, args.length));
         try {
             switch (args[0].toLowerCase()) {
                 case "record":
-                    EmVmcPlayback.recordToFile(args);
+                    EmVmcPlayback.recordToFile(arguments);
                     break;
                 case "play":
-                    EmVmcPlayback.playFromFile(args);
+                    EmVmcPlayback.playFromFile(arguments);
                     break;
                 case "inout":
-                    EmVmcPlayback.recordAndPlayback(args);
+                    EmVmcPlayback.recordAndPlayback(arguments);
                     break;
                 default:
                     throw new IllegalArgumentException("Unrecognised argument '" + args[0] + '"');
@@ -71,46 +98,60 @@ public class EmVmcPlayback {
     // Maybe in the future we could record to file, appending each OSC message as received (or batching a few together
     // at a time) instead of writing the entire file at the end
     // TODO: Replace all these static functions with instance methods
-    private static void recordToFile(String[] args) throws IOException, InterruptedException {
-        String fileName = args[1];
-        int portIn = Integer.parseInt(args[2]);
-        int recordingTimeSeconds = Integer.parseInt(args[3]);
+    private static void recordToFile(Map<String, String> arguments) throws IOException, InterruptedException {
+        String fileName = removeArgument(arguments, ARGUMENT_FILE_NAME);
+        int portIn = Integer.parseInt(removeArgument(arguments, ARGUMENT_PORT));
+        int recordingTimeSeconds = Integer.parseInt(removeArgument(arguments, ARGUMENT_RECORDING_DURATION));
+        boolean allowAllOsc = removeFlagArgument(arguments, FLAG_ALLOW_ALL_OSC);
+        logUnknownArguments(arguments);
 
-        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, recordingTimeSeconds, fileName);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, recordingTimeSeconds, fileName, allowAllOsc);
 
+        LOG.info("Recording {} on port {} to {} for {}s will start in:", allowAllOsc ? "all OSC messages" : "VMC messages", portIn, fileName, recordingTimeSeconds);
         EmVmcPlayback.recordingCountdown();
         List<RecordedMessage> recordedMessages = emVmcPlayback.record();
 
         emVmcPlayback.saveToFile(recordedMessages);
     }
 
-    private static void playFromFile(String[] args) throws IOException {
-        String fileName = args[1];
-        int portOut = Integer.parseInt(args[2]);
-        String marionetteAddress = args.length > 3 ? args[3] : "localhost";
+    private static void playFromFile(Map<String, String> arguments) throws IOException {
+        String fileName = removeArgument(arguments, ARGUMENT_FILE_NAME);
+        int portOut = Integer.parseInt(removeArgument(arguments, ARGUMENT_PORT));
+        String marionetteAddress = removeArgument(arguments, "localhost", ARGUMENT_MARIONETTE_ADDRESS);
+        boolean replaceVmcTime = removeFlagArgument(arguments, FLAG_REPLACE_VMC_TIMING);
+        boolean allowAllOsc = removeFlagArgument(arguments, FLAG_ALLOW_ALL_OSC);
+        logUnknownArguments(arguments);
 
-        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(fileName, portOut, marionetteAddress);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(fileName, portOut, marionetteAddress, allowAllOsc);
 
         List<RecordedMessage> recordedMessages = emVmcPlayback.loadFromFile();
 
-        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages);
+        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages, replaceVmcTime);
+
+        LOG.info("Started looping playback of '{}' to {}:{}. VMC timing message replacement is: {}", fileName, marionetteAddress, portOut, replaceVmcTime ? "enabled" : "disabled");
 
         EmVmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
 
-    private static void recordAndPlayback(String[] args) throws IOException, InterruptedException {
-        int portIn = Integer.parseInt(args[1]);
-        int portOut = Integer.parseInt(args[2]);
-        int recordingTimeSeconds = Integer.parseInt(args[3]);
-        String marionetteAddress = args.length > 4 ? args[4] : "localhost";
+    private static void recordAndPlayback(Map<String, String> arguments) throws IOException, InterruptedException {
+        int portIn = Integer.parseInt(removeArgument(arguments, ARGUMENT_PORT_IN));
+        int portOut = Integer.parseInt(removeArgument(arguments, ARGUMENT_PORT_OUT));
+        int recordingTimeSeconds = Integer.parseInt(removeArgument(arguments, ARGUMENT_RECORDING_DURATION));
+        String marionetteAddress = removeArgument(arguments, "localhost", ARGUMENT_MARIONETTE_ADDRESS);
+        boolean replaceVmcTime = removeFlagArgument(arguments, FLAG_REPLACE_VMC_TIMING);
+        boolean allowAllOsc = removeFlagArgument(arguments, FLAG_ALLOW_ALL_OSC);
+        logUnknownArguments(arguments);
 
-        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress, allowAllOsc);
 
+        LOG.info("Temporary recording of {} on port {} for {}s will start in:", allowAllOsc ? "all OSC messages" : "VMC messages", portIn, recordingTimeSeconds);
         EmVmcPlayback.recordingCountdown();
 
         List<RecordedMessage> recordedMessages = emVmcPlayback.record();
 
-        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages);
+        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages, replaceVmcTime);
+
+        LOG.info("Started looping playback of recorded {}s to {}:{}. VMC timing message replacement is: {}.", recordingTimeSeconds, marionetteAddress, portOut, replaceVmcTime ? "enabled" : "disabled");
 
         EmVmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
@@ -125,13 +166,83 @@ public class EmVmcPlayback {
     }
 
     private static void recordingCountdown() throws InterruptedException {
-        System.out.println("Recording will start in");
         System.out.println("3");
         Thread.sleep(1000);
         System.out.println("2");
         Thread.sleep(1000);
         System.out.println("1");
         Thread.sleep(1000);
+    }
+
+    private static Map<String, String> parseArguments(String[] args) {
+        Map<String, String> argumentsMap = new HashMap<>();
+        for (String arg : args) {
+            // All arguments start with -
+            if (arg.startsWith("-")) {
+                // Argument could have a value or could be a non-combining flag
+                // e.g. '--myArg=Value' or '--myFlag'
+                if (arg.startsWith("--")) {
+                    // strip off all preceding '-'
+                    arg = arg.replaceFirst("^-+", "");
+
+                    // Look for an equals symbol, search from the start of the string
+                    int firstEqualsIndex = arg.indexOf('=');
+                    if (firstEqualsIndex != -1) {
+                        // If there's an equals symbol, there should be a value after it
+                        String value = arg.substring(firstEqualsIndex + 1);
+                        // Get the part before the '=' and convert to lowercase
+                        arg = arg.substring(0, firstEqualsIndex).toLowerCase();
+                        argumentsMap.put(arg, value);
+                    } else {
+                        // There's no equals sign so it must be a flag
+                        argumentsMap.put(arg, "true");
+                    }
+                }
+                // Argument can't have a value, it is a single character flag or could be multiple single character
+                // flags combined together
+                // e.g. '-e', '-rt' or '-kmo'
+                else {
+                    // Convert to char array and ignore the preceding '-'
+                    char[] flags = arg.substring(1).toCharArray();
+                    for (char flag : flags) {
+                        argumentsMap.put(Character.toString(flag), "true");
+                    }
+                }
+            } else {
+                LOG.warn("Invalid argument '{}'", arg);
+            }
+        }
+        return argumentsMap;
+    }
+
+    private static String removeArgument(Map<String, String> map, String... argumentNames) {
+        return removeArgument(map, null, argumentNames);
+    }
+
+    private static String removeArgument(Map<String, String> map, String defaultValue, String... argumentNames) {
+        for (String argumentName : argumentNames) {
+            if (map.containsKey(argumentName)) {
+                return map.remove(argumentName);
+            }
+        }
+        if (defaultValue == null) {
+            throw new IllegalArgumentException("No suitable argument found matching " + Arrays.toString(argumentNames));
+        } else {
+            return defaultValue;
+        }
+    }
+
+    private static boolean removeFlagArgument(Map<String, ?> map, String... flagNames) {
+        for (String flagName : flagNames) {
+            if (map.remove(flagName) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void logUnknownArguments(Map<String, String> map) {
+        map.forEach((k, v) -> LOG.warn("Unrecognised argument name '{}' with value '{}'", k, v));
     }
 
     @SuppressWarnings("unchecked")
@@ -142,6 +253,9 @@ public class EmVmcPlayback {
             List<RecordedMessage> recordedMessages = (List<RecordedMessage>) objectInputStream.readObject();
             objectInputStream.close();
             gzipInputStream.close();
+            if (!this.allowAllOsc) {
+                recordedMessages.removeIf(((Predicate<? super RecordedMessage>) VmcUtils::isVmc).negate());
+            }
             return recordedMessages;
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -149,11 +263,16 @@ public class EmVmcPlayback {
     }
 
     private List<RecordedMessage> record() throws IOException {
-        VmcRecorder vmcRecorder = new VmcRecorder(this.portIn);
-        vmcRecorder.init();
+        OscRecorder oscRecorder;
+        if (this.allowAllOsc) {
+            oscRecorder = new OscRecorder(new GenericMessageSelector(false, m -> true), this.portIn);
+        } else {
+            oscRecorder = new VmcRecorder(this.portIn);
+        }
+        oscRecorder.init();
 
         System.out.println("Recording");
-        vmcRecorder.startRecording();
+        oscRecorder.startRecording();
         // wait for messages for the input number of seconds
         try {
             Thread.sleep(this.recordingDurationSeconds * 1000);
@@ -161,9 +280,9 @@ public class EmVmcPlayback {
             // Should never happen
             throw new RuntimeException(e);
         }
-        List<RecordedMessage> recordedMessages = vmcRecorder.stopRecording();
+        List<RecordedMessage> recordedMessages = oscRecorder.stopRecording();
         System.out.println("Recording stopped");
-        System.out.println("Recorded " + vmcRecorder.getMessageCount() + " messages in " + vmcRecorder.getRecordingDurationMillis() + " milliseconds");
+        System.out.println("Recorded " + oscRecorder.getMessageCount() + " messages in " + oscRecorder.getRecordingDurationMillis() + " milliseconds");
         return recordedMessages;
     }
 
@@ -177,12 +296,17 @@ public class EmVmcPlayback {
         gzipOutputStream.close();
     }
 
-    private OscPlayer startPlayback(List<RecordedMessage> recordedMessages) throws IOException {
+    private OscPlayer startPlayback(List<RecordedMessage> recordedMessages, boolean replaceVmcTimingMessages) throws IOException {
 
-        OscPlayer oscPlayer = new OscPlayer(this.portOut, recordedMessages);
+        OscPlayer oscPlayer;
+        InetSocketAddress inetSocketAddress = new InetSocketAddress(this.marionetteAddress, this.portOut);
+        if (replaceVmcTimingMessages) {
+            oscPlayer = new VmcPlayer(inetSocketAddress, recordedMessages);
+        } else {
+            oscPlayer = new OscPlayer(inetSocketAddress, recordedMessages);
+        }
 
         oscPlayer.start();
-        System.out.println("Started playback");
         return oscPlayer;
     }
 
