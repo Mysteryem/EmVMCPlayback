@@ -1,37 +1,45 @@
 package uk.co.mysterymayhem.vmcplayback.osc;
 
-import java.io.*;
+import com.illposed.osc.OSCMessage;
+import com.illposed.osc.OSCMessageInfo;
+import com.illposed.osc.OSCPacket;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
+ * Represents the data of a recorded OSC message.
+ * <p>
  * Created by Mysteryem on 31/07/2021.
  */
-public class RecordedMessage implements Serializable {
-    private static final long serialVersionUID = 2L;
+public class RecordedMessage implements RecordedPacketData<RecordedMessage>, Serializable {
+    private static final long serialVersionUID = 3L;
 
-    private final long offsetTime;
     private final String address;
     transient private List<Object> arguments;
     transient private CharSequence argumentTypes;
 
-    public RecordedMessage(long offsetTime, String address, List<Object> arguments, CharSequence argumentTypes) {
+    public RecordedMessage(OSCMessage oscMessage) {
+        this(oscMessage.getAddress(), oscMessage.getArguments(), oscMessage.getInfo().getArgumentTypeTags());
+    }
+
+    public RecordedMessage(String address, List<Object> arguments, CharSequence argumentTypes) {
         if (!(argumentTypes instanceof Serializable)) {
             argumentTypes = argumentTypes.toString();
         }
         if (arguments.getClass() != ArrayList.class) {
             arguments = new ArrayList<>(arguments);
         }
-        this.offsetTime = offsetTime;
         this.address = address;
         this.arguments = arguments;
         this.argumentTypes = argumentTypes;
-    }
-
-    public long getOffsetTime() {
-        return offsetTime;
     }
 
     public String getAddress() {
@@ -47,27 +55,45 @@ public class RecordedMessage implements Serializable {
     }
 
     @Override
+    public int getMessageCount() {
+        return 1;
+    }
+
+    @Override
+    public OSCPacket toOscPacket() {
+        OSCMessageInfo oscMessageInfo = new OSCMessageInfo(this.getArgumentTypes());
+        return new OSCMessage(this.getAddress(), this.getArguments(), oscMessageInfo);
+    }
+
+    @Override
+    public RecordedMessage filter(Predicate<RecordedMessage> messagePredicate) {
+        if (messagePredicate.test(this)) {
+            return this;
+        } else {
+            return null;
+        }
+    }
+
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        RecordedMessage that = (RecordedMessage) o;
-        return offsetTime == that.offsetTime &&
-                Objects.equals(address, that.address) &&
-                Objects.equals(arguments, that.arguments) &&
-                Objects.equals(argumentTypes, that.argumentTypes);
+        if (!super.equals(o)) return false;
+        RecordedMessage message = (RecordedMessage) o;
+        return Objects.equals(arguments, message.arguments) &&
+                Objects.equals(argumentTypes, message.argumentTypes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(offsetTime, address, arguments, argumentTypes);
+        return Objects.hash(super.hashCode(), arguments, argumentTypes);
     }
 
     @Override
     public String toString() {
         return "RecordedMessage{" +
-                "offsetTime=" + offsetTime +
-                ", address='" + address + '\'' +
-                ", arguments=" + arguments +
+                "arguments=" + arguments +
                 ", argumentTypes=" + argumentTypes +
                 '}';
     }
@@ -93,8 +119,8 @@ public class RecordedMessage implements Serializable {
             throws ClassNotFoundException, IOException {
         ois.defaultReadObject();
 
-        Object[] argumentsArray = (Object[])ois.readObject();
-        String argumentTypes = (String)ois.readObject();
+        Object[] argumentsArray = (Object[]) ois.readObject();
+        String argumentTypes = (String) ois.readObject();
 
         this.arguments = Arrays.asList(argumentsArray);
         this.argumentTypes = argumentTypes;

@@ -2,12 +2,11 @@ package uk.co.mysterymayhem.vmcplayback;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import uk.co.mysterymayhem.vmcplayback.osc.GenericMessageSelector;
 import uk.co.mysterymayhem.vmcplayback.osc.OscPlayer;
 import uk.co.mysterymayhem.vmcplayback.osc.OscRecorder;
-import uk.co.mysterymayhem.vmcplayback.osc.RecordedMessage;
+import uk.co.mysterymayhem.vmcplayback.osc.RecordedPacket;
+import uk.co.mysterymayhem.vmcplayback.osc.RecordedPacketData;
 import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcPlayer;
-import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcRecorder;
 import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcUtils;
 
 import java.io.IOException;
@@ -17,11 +16,14 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.function.Predicate;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
+ * Main class. Handles the program arguments and calls the correct methods based on those arguments.
+ * <p>
  * Created by Mysteryem on 31/07/2021.
  */
 public class EmVmcPlayback {
@@ -109,7 +111,7 @@ public class EmVmcPlayback {
 
         LOG.info("Recording {} on port {} to {} for {}s will start in:", allowAllOsc ? "all OSC messages" : "VMC messages", portIn, fileName, recordingTimeSeconds);
         EmVmcPlayback.recordingCountdown();
-        List<RecordedMessage> recordedMessages = emVmcPlayback.record();
+        List<RecordedPacket<?, ?>> recordedMessages = emVmcPlayback.record();
 
         emVmcPlayback.saveToFile(recordedMessages);
     }
@@ -124,11 +126,25 @@ public class EmVmcPlayback {
 
         EmVmcPlayback emVmcPlayback = new EmVmcPlayback(fileName, portOut, marionetteAddress, allowAllOsc);
 
-        List<RecordedMessage> recordedMessages = emVmcPlayback.loadFromFile();
+        List<RecordedPacket<?, ?>> recordedPackets = emVmcPlayback.loadFromFile();
 
-        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages, replaceVmcTime);
+        // The packets didn't just get recorded so the messages need to be counted manually
+        int messageCount = recordedPackets.stream()
+                // Gives "java.lang.BootstrapMethodError: call site initialization exception" if I leave out the
+                // explicit cast for some reason. Compiler error? Even IntelliJ thinks the return type should be Object,
+                // resulting in what would be a Stream<?>
+                // I wonder if '? extends RecordedPacketData<?>' is technically more accurate for the explicit cast
+                .map((Function<RecordedPacket<?, ?>, RecordedPacketData<?>>) RecordedPacket::getPacketData)
+                .mapToInt(RecordedPacketData::getMessageCount)
+                .sum();
 
-        LOG.info("Started looping playback of '{}' to {}:{}. VMC timing message replacement is: {}", fileName, marionetteAddress, portOut, replaceVmcTime ? "enabled" : "disabled");
+        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedPackets, replaceVmcTime);
+
+        LOG.info("Started looping playback of {} from '{}' ({} packets and {} messages total) to {}:{}. " +
+                        "VMC timing message replacement is: {}",
+                allowAllOsc ? "all OSC messages" : "only VMC messages",
+                fileName, recordedPackets.size(), messageCount, marionetteAddress, portOut,
+                replaceVmcTime ? "enabled" : "disabled");
 
         EmVmcPlayback.stopPlaybackOnUserInput(oscPlayer);
     }
@@ -147,9 +163,9 @@ public class EmVmcPlayback {
         LOG.info("Temporary recording of {} on port {} for {}s will start in:", allowAllOsc ? "all OSC messages" : "VMC messages", portIn, recordingTimeSeconds);
         EmVmcPlayback.recordingCountdown();
 
-        List<RecordedMessage> recordedMessages = emVmcPlayback.record();
+        List<RecordedPacket<?, ?>> recordedPackets = emVmcPlayback.record();
 
-        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedMessages, replaceVmcTime);
+        OscPlayer oscPlayer = emVmcPlayback.startPlayback(recordedPackets, replaceVmcTime);
 
         LOG.info("Started looping playback of recorded {}s to {}:{}. VMC timing message replacement is: {}.", recordingTimeSeconds, marionetteAddress, portOut, replaceVmcTime ? "enabled" : "disabled");
 
@@ -246,15 +262,18 @@ public class EmVmcPlayback {
     }
 
     @SuppressWarnings("unchecked")
-    private List<RecordedMessage> loadFromFile() throws IOException {
+    private List<RecordedPacket<?, ?>> loadFromFile() throws IOException {
         GZIPInputStream gzipInputStream = new GZIPInputStream(Files.newInputStream(Paths.get(this.fileName)));
         ObjectInputStream objectInputStream = new ObjectInputStream(gzipInputStream);
         try {
-            List<RecordedMessage> recordedMessages = (List<RecordedMessage>) objectInputStream.readObject();
+            List<RecordedPacket<?, ?>> recordedMessages = (List<RecordedPacket<?, ?>>) objectInputStream.readObject();
             objectInputStream.close();
             gzipInputStream.close();
             if (!this.allowAllOsc) {
-                recordedMessages.removeIf(((Predicate<? super RecordedMessage>) VmcUtils::isVmc).negate());
+                recordedMessages = recordedMessages.stream()
+                        .map(recordedPacket -> recordedPacket.filter(VmcUtils::isVmc))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
             }
             return recordedMessages;
         } catch (ClassNotFoundException e) {
@@ -262,16 +281,16 @@ public class EmVmcPlayback {
         }
     }
 
-    private List<RecordedMessage> record() throws IOException {
+    private List<RecordedPacket<?, ?>> record() throws IOException {
         OscRecorder oscRecorder;
         if (this.allowAllOsc) {
-            oscRecorder = new OscRecorder(new GenericMessageSelector(false, m -> true), this.portIn);
+            oscRecorder = new OscRecorder(m -> true, this.portIn);
         } else {
-            oscRecorder = new VmcRecorder(this.portIn);
+            oscRecorder = new OscRecorder(VmcUtils::isVmc, this.portIn);
         }
         oscRecorder.init();
 
-        System.out.println("Recording");
+        LOG.info("Recording");
         oscRecorder.startRecording();
         // wait for messages for the input number of seconds
         try {
@@ -280,23 +299,23 @@ public class EmVmcPlayback {
             // Should never happen
             throw new RuntimeException(e);
         }
-        List<RecordedMessage> recordedMessages = oscRecorder.stopRecording();
-        System.out.println("Recording stopped");
-        System.out.println("Recorded " + oscRecorder.getMessageCount() + " messages in " + oscRecorder.getRecordingDurationMillis() + " milliseconds");
+        List<RecordedPacket<?, ?>> recordedMessages = oscRecorder.stopRecording();
+        LOG.info("Recording stopped");
+        LOG.info("Recorded {} packets ({} messages total) in {} milliseconds", oscRecorder.getPacketCount(), oscRecorder.countMessages(), oscRecorder.getRecordingDurationMillis());
         return recordedMessages;
     }
 
-    private void saveToFile(List<RecordedMessage> recordedMessages) throws IOException {
+    private void saveToFile(List<RecordedPacket<?, ?>> recordedPackets) throws IOException {
         GZIPOutputStream gzipOutputStream = new GZIPOutputStream(Files.newOutputStream(Paths.get(this.fileName)));
         ObjectOutputStream objectOutputStream = new ObjectOutputStream(gzipOutputStream);
-        objectOutputStream.writeObject(recordedMessages);
+        objectOutputStream.writeObject(recordedPackets);
         objectOutputStream.flush();
         objectOutputStream.close();
         gzipOutputStream.flush();
         gzipOutputStream.close();
     }
 
-    private OscPlayer startPlayback(List<RecordedMessage> recordedMessages, boolean replaceVmcTimingMessages) throws IOException {
+    private OscPlayer startPlayback(List<RecordedPacket<?, ?>> recordedMessages, boolean replaceVmcTimingMessages) throws IOException {
 
         OscPlayer oscPlayer;
         InetSocketAddress inetSocketAddress = new InetSocketAddress(this.marionetteAddress, this.portOut);

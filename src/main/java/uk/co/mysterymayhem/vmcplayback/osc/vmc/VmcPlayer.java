@@ -6,12 +6,15 @@ import com.illposed.osc.OSCSerializeException;
 import com.illposed.osc.transport.udp.OSCPortOut;
 import uk.co.mysterymayhem.vmcplayback.osc.OscPlayer;
 import uk.co.mysterymayhem.vmcplayback.osc.RecordedMessage;
+import uk.co.mysterymayhem.vmcplayback.osc.RecordedPacket;
 
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.TimerTask;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 //TODO To maintain timing accuracy, instead of adding in a our own timing message, we could set all of the timing
@@ -42,26 +45,29 @@ public class VmcPlayer extends OscPlayer {
     // /VMC/Ext/Set/Period (int){Status} (int){Root} (int){Bone} (int){BlendShape} (int){Camera} (int){Devices}
     // sent to the Performer. Does VSeeFace even send messages to the Performer?
     private static final long TIMING_PERIOD_MILLIS = 100;
+    private static final Predicate<RecordedMessage> IS_NOT_TIMING_MESSAGE =
+            recordedMessage -> !recordedMessage.getAddress().equals(VMC_TIMING_ADDRESS);
 
-    public VmcPlayer(int portOut, List<RecordedMessage> recordedMessages, long repeatPeriodMillis) throws IOException {
+    public VmcPlayer(int portOut, List<RecordedPacket<?, ?>> recordedMessages, long repeatPeriodMillis) throws IOException {
         super(portOut, filterTimingMessages(recordedMessages), repeatPeriodMillis);
     }
 
-    public VmcPlayer(int portOut, List<RecordedMessage> recordedMessages) throws IOException {
+    public VmcPlayer(int portOut, List<RecordedPacket<?, ?>> recordedMessages) throws IOException {
         super(portOut, filterTimingMessages(recordedMessages));
     }
 
-    public VmcPlayer(SocketAddress socketAddress, List<RecordedMessage> recordedMessages, long repeatPeriodMillis) throws IOException {
+    public VmcPlayer(SocketAddress socketAddress, List<RecordedPacket<?, ?>> recordedMessages, long repeatPeriodMillis) throws IOException {
         super(socketAddress, filterTimingMessages(recordedMessages), repeatPeriodMillis);
     }
 
-    public VmcPlayer(SocketAddress socketAddress, List<RecordedMessage> recordedMessages) throws IOException {
+    public VmcPlayer(SocketAddress socketAddress, List<RecordedPacket<?, ?>> recordedMessages) throws IOException {
         super(socketAddress, filterTimingMessages(recordedMessages));
     }
 
-    private static List<RecordedMessage> filterTimingMessages(List<RecordedMessage> inputMessages) {
+    private static List<RecordedPacket<?, ?>> filterTimingMessages(List<RecordedPacket<?, ?>> inputMessages) {
         return inputMessages.stream()
-                .filter(message -> !message.getAddress().equals(VMC_TIMING_ADDRESS))
+                .map(recordedPacket -> recordedPacket.filter(IS_NOT_TIMING_MESSAGE))
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 

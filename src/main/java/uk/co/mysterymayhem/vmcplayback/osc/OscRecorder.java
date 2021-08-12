@@ -1,6 +1,5 @@
 package uk.co.mysterymayhem.vmcplayback.osc;
 
-import com.illposed.osc.MessageSelector;
 import com.illposed.osc.transport.udp.OSCPortIn;
 import com.illposed.osc.transport.udp.OSCPortInBuilder;
 
@@ -9,38 +8,40 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
+ * Records OSC messages received on a specified port and allows filtering which messages get recorded.
+ * <p>
  * Created by Mysteryem on 31/07/2021.
  */
 public class OscRecorder {
 
-    private final RecordingMessageListener recordingMessageListener;
+    private final RecordingPacketListener recordingPacketListener;
     private final OSCPortIn oscPortIn;
     private boolean started = false;
     private boolean ended = false;
     private long endTime = -1;
 
-    public OscRecorder(MessageSelector messageSelector, SocketAddress socketAddress) throws IOException {
-        RecordingMessageListener messageListener = new RecordingMessageListener();
+    public OscRecorder(Predicate<RecordedMessage> messageSelector, SocketAddress socketAddress) throws IOException {
+        RecordingPacketListener messageListener = new RecordingPacketListener(messageSelector);
 
-        this.recordingMessageListener = messageListener;
+        this.recordingPacketListener = messageListener;
         this.oscPortIn = new OSCPortInBuilder()
                 .setSocketAddress(socketAddress)
-                .addPacketListener(OSCPortIn.defaultPacketListener())
-                .addMessageListener(messageSelector, messageListener)
+                .addPacketListener(messageListener)
                 .build();
     }
 
-    public OscRecorder(MessageSelector messageSelector, String hostname, int port) throws IOException {
+    public OscRecorder(Predicate<RecordedMessage> messageSelector, String hostname, int port) throws IOException {
         this(messageSelector, new InetSocketAddress(hostname, port));
     }
 
-    public OscRecorder(MessageSelector messageSelector, InetAddress inetAddress, int port) throws IOException {
+    public OscRecorder(Predicate<RecordedMessage> messageSelector, InetAddress inetAddress, int port) throws IOException {
         this(messageSelector, new InetSocketAddress(inetAddress, port));
     }
 
-    public OscRecorder(MessageSelector messageSelector, int port) throws IOException {
+    public OscRecorder(Predicate<RecordedMessage> messageSelector, int port) throws IOException {
         this(messageSelector, "localhost", port);
     }
 
@@ -49,19 +50,19 @@ public class OscRecorder {
     }
 
     public void startRecording() {
-        this.recordingMessageListener.startRecording();
+        this.recordingPacketListener.startRecording();
         this.oscPortIn.startListening();
         this.started = true;
     }
 
-    public List<RecordedMessage> stopRecording() throws IOException {
+    public List<RecordedPacket<?, ?>> stopRecording() throws IOException {
         if (this.started) {
             this.oscPortIn.stopListening();
             long endTimeMilli = System.currentTimeMillis();
             this.oscPortIn.close();
             this.endTime = endTimeMilli;
             this.ended = true;
-            return recordingMessageListener.getRecordedMessages();
+            return recordingPacketListener.getRecordedPackets();
         } else {
             throw new IllegalStateException("Can't stop recording when not started yet");
         }
@@ -69,7 +70,7 @@ public class OscRecorder {
 
     public long getStartTimeMillis() {
         if (this.started) {
-            return this.recordingMessageListener.getStartTime();
+            return this.recordingPacketListener.getStartTime();
         } else {
             throw new IllegalStateException("Can't get start time when not started yet");
         }
@@ -95,7 +96,11 @@ public class OscRecorder {
         }
     }
 
-    public int getMessageCount() {
-        return recordingMessageListener.getMessageCount();
+    public int getPacketCount() {
+        return recordingPacketListener.getPacketCount();
+    }
+
+    public int countMessages() {
+        return recordingPacketListener.countMessages();
     }
 }
