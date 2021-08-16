@@ -2,10 +2,7 @@ package uk.co.mysterymayhem.vmcplayback;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import uk.co.mysterymayhem.vmcplayback.osc.OscPlayer;
-import uk.co.mysterymayhem.vmcplayback.osc.OscRecorder;
-import uk.co.mysterymayhem.vmcplayback.osc.RecordedPacket;
-import uk.co.mysterymayhem.vmcplayback.osc.RecordedPacketData;
+import uk.co.mysterymayhem.vmcplayback.osc.*;
 import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcPlayer;
 import uk.co.mysterymayhem.vmcplayback.osc.vmc.VmcUtils;
 
@@ -17,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -41,7 +39,10 @@ public class EmVmcPlayback {
     // Replace VMC timing messages when playing back recordings
     private static final String[] FLAG_REPLACE_VMC_TIMING = {"t", "replacevmctiming"};
     // Unfilter message recording/playback to contain all OSC messages instead of only VMC messages
-    private static final String[] FLAG_ALLOW_ALL_OSC = {"o", "osc", "all"};
+    private static final String[] FLAG_ALLOW_ALL_OSC = {"o", "osc"};
+    // Filter out VMC messages to do with moving bones excluding eyes, including the avatar root.
+    // With this, the marionette's body and head won't move which is great for isolating face tracking from a recording
+    private static final String[] FLAG_FILTER_OUT_BODY_AND_HEAD_MOVEMENT = {"b", "filterbodyandheadmovement"};
 
     private String fileName;
     private int portIn;
@@ -50,27 +51,31 @@ public class EmVmcPlayback {
     // 'marionette' is VMC terminology for the receiver of motion data.
     private String marionetteAddress;
     private boolean allowAllOsc;
+    private boolean filterBodyAndHeadTracking;
 
-    public EmVmcPlayback(int portIn, int recordingDurationSeconds, String fileName, boolean allowAllOsc) {
+    public EmVmcPlayback(int portIn, int recordingDurationSeconds, String fileName, boolean allowAllOsc, boolean filterBodyAndHeadTracking) {
         this.portIn = portIn;
         this.recordingDurationSeconds = recordingDurationSeconds;
         this.fileName = fileName;
         this.allowAllOsc = allowAllOsc;
+        this.filterBodyAndHeadTracking = filterBodyAndHeadTracking;
     }
 
-    public EmVmcPlayback(String fileName, int portOut, String marionetteAddress, boolean allowAllOsc) {
+    public EmVmcPlayback(String fileName, int portOut, String marionetteAddress, boolean allowAllOsc, boolean filterBodyAndHeadTracking) {
         this.fileName = fileName;
         this.portOut = portOut;
         this.marionetteAddress = marionetteAddress;
         this.allowAllOsc = allowAllOsc;
+        this.filterBodyAndHeadTracking = filterBodyAndHeadTracking;
     }
 
-    public EmVmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress, boolean allowAllOsc) {
+    public EmVmcPlayback(int portIn, int portOut, int recordingDurationSeconds, String marionetteAddress, boolean allowAllOsc, boolean filterBodyAndHeadTracking) {
         this.portIn = portIn;
         this.portOut = portOut;
         this.recordingDurationSeconds = recordingDurationSeconds;
         this.marionetteAddress = marionetteAddress;
         this.allowAllOsc = allowAllOsc;
+        this.filterBodyAndHeadTracking = filterBodyAndHeadTracking;
     }
 
     public static void main(String[] args) {
@@ -105,9 +110,10 @@ public class EmVmcPlayback {
         int portIn = Integer.parseInt(removeArgument(arguments, ARGUMENT_PORT));
         int recordingTimeSeconds = Integer.parseInt(removeArgument(arguments, ARGUMENT_RECORDING_DURATION));
         boolean allowAllOsc = removeFlagArgument(arguments, FLAG_ALLOW_ALL_OSC);
+        boolean filterVmcBoneMessage = removeFlagArgument(arguments, FLAG_FILTER_OUT_BODY_AND_HEAD_MOVEMENT);
         logUnknownArguments(arguments);
 
-        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, recordingTimeSeconds, fileName, allowAllOsc);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, recordingTimeSeconds, fileName, allowAllOsc, filterVmcBoneMessage);
 
         LOG.info("Recording {} on port {} to {} for {}s will start in:", allowAllOsc ? "all OSC messages" : "VMC messages", portIn, fileName, recordingTimeSeconds);
         EmVmcPlayback.recordingCountdown();
@@ -122,9 +128,10 @@ public class EmVmcPlayback {
         String marionetteAddress = removeArgument(arguments, "localhost", ARGUMENT_MARIONETTE_ADDRESS);
         boolean replaceVmcTime = removeFlagArgument(arguments, FLAG_REPLACE_VMC_TIMING);
         boolean allowAllOsc = removeFlagArgument(arguments, FLAG_ALLOW_ALL_OSC);
+        boolean filterVmcNonFace = removeFlagArgument(arguments, FLAG_FILTER_OUT_BODY_AND_HEAD_MOVEMENT);
         logUnknownArguments(arguments);
 
-        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(fileName, portOut, marionetteAddress, allowAllOsc);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(fileName, portOut, marionetteAddress, allowAllOsc, filterVmcNonFace);
 
         List<RecordedPacket<?, ?>> recordedPackets = emVmcPlayback.loadFromFile();
 
@@ -156,9 +163,10 @@ public class EmVmcPlayback {
         String marionetteAddress = removeArgument(arguments, "localhost", ARGUMENT_MARIONETTE_ADDRESS);
         boolean replaceVmcTime = removeFlagArgument(arguments, FLAG_REPLACE_VMC_TIMING);
         boolean allowAllOsc = removeFlagArgument(arguments, FLAG_ALLOW_ALL_OSC);
+        boolean filterVmcBoneMessage = removeFlagArgument(arguments, FLAG_FILTER_OUT_BODY_AND_HEAD_MOVEMENT);
         logUnknownArguments(arguments);
 
-        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress, allowAllOsc);
+        EmVmcPlayback emVmcPlayback = new EmVmcPlayback(portIn, portOut, recordingTimeSeconds, marionetteAddress, allowAllOsc, filterVmcBoneMessage);
 
         LOG.info("Temporary recording of {} on port {} for {}s will start in:", allowAllOsc ? "all OSC messages" : "VMC messages", portIn, recordingTimeSeconds);
         EmVmcPlayback.recordingCountdown();
@@ -269,9 +277,11 @@ public class EmVmcPlayback {
             List<RecordedPacket<?, ?>> recordedMessages = (List<RecordedPacket<?, ?>>) objectInputStream.readObject();
             objectInputStream.close();
             gzipInputStream.close();
-            if (!this.allowAllOsc) {
+            Predicate<RecordedMessage> filter = VmcUtils.buildMessageFilter(this.allowAllOsc, this.filterBodyAndHeadTracking);
+            if (filter != null) {
+                // Since the filter variable can't be final, we need a copy
                 recordedMessages = recordedMessages.stream()
-                        .map(recordedPacket -> recordedPacket.filter(VmcUtils::isVmc))
+                        .map(recordedPacket -> recordedPacket.filter(filter))
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());
             }
@@ -283,10 +293,11 @@ public class EmVmcPlayback {
 
     private List<RecordedPacket<?, ?>> record() throws IOException {
         OscRecorder oscRecorder;
-        if (this.allowAllOsc) {
+        Predicate<RecordedMessage> filter = VmcUtils.buildMessageFilter(this.allowAllOsc, this.filterBodyAndHeadTracking);
+        if (filter == null) {
             oscRecorder = new OscRecorder(m -> true, this.portIn);
         } else {
-            oscRecorder = new OscRecorder(VmcUtils::isVmc, this.portIn);
+            oscRecorder = new OscRecorder(filter, this.portIn);
         }
         oscRecorder.init();
 

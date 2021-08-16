@@ -26,6 +26,7 @@ Single character flag arguments can be combined into a single argument, e.g. `-t
 - `--address=<address/hostname>`, address/hostname to send to, defaults to localhost when absent
 - `-t, --replaceVMCTiming`, enable to replace VMC timing messages, in VSeeFace, this prevents glitching when looping and time goes back to the start
 - `-o, --osc`, enable to allow all OSC messages to be recorded or played back instead of only VMC messages
+- `-b, --filterBodyAndHeadMovement`, enable to filter out body and head movement from VMC messages, maintaining eye movement and blendshape clips; useful for isolating face tracking
 
 ## Bugs:
 1. Full relative file paths don't work (no ../myrecording.bin.gz)

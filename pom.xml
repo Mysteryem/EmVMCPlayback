@@ -6,7 +6,7 @@
 
     <groupId>EmVMCPlayback</groupId>
     <artifactId>EmVMCPlayback</artifactId>
-    <version>1.1-SNAPSHOT</version>
+    <version>1.1.1-SNAPSHOT</version>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>

@@ -74,26 +74,26 @@ public class RecordedMessage implements RecordedPacketData<RecordedMessage>, Ser
         }
     }
 
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
-        RecordedMessage message = (RecordedMessage) o;
-        return Objects.equals(arguments, message.arguments) &&
-                Objects.equals(argumentTypes, message.argumentTypes);
+        RecordedMessage that = (RecordedMessage) o;
+        return Objects.equals(address, that.address) &&
+                Objects.equals(arguments, that.arguments) &&
+                Objects.equals(argumentTypes, that.argumentTypes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), arguments, argumentTypes);
+        return Objects.hash(address, arguments, argumentTypes);
     }
 
     @Override
     public String toString() {
         return "RecordedMessage{" +
-                "arguments=" + arguments +
+                "address='" + address + '\'' +
+                ", arguments=" + arguments +
                 ", argumentTypes=" + argumentTypes +
                 '}';
     }
