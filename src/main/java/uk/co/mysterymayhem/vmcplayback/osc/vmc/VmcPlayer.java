@@ -1,29 +1,14 @@
 package uk.co.mysterymayhem.vmcplayback.osc.vmc;
 
-import com.illposed.osc.OSCMessage;
-import com.illposed.osc.OSCMessageInfo;
-import com.illposed.osc.OSCSerializeException;
-import com.illposed.osc.transport.udp.OSCPortOut;
 import uk.co.mysterymayhem.vmcplayback.osc.OscPlayer;
 import uk.co.mysterymayhem.vmcplayback.osc.RecordedMessage;
 import uk.co.mysterymayhem.vmcplayback.osc.RecordedPacket;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.TimerTask;
-import java.util.function.Predicate;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-
-//TODO To maintain timing accuracy, instead of adding in a our own timing message, we could set all of the timing
-// messages to increment their value by an amount equal to
-// (last timing value) + (average difference between timings) - (first timing value)
-// so that the first looped timing value is 1 message in time after the last message of the initial run of messages
-// -
-// It would be a good idea to check that the standard deviation isn't very high and maybe eliminate any values that
-// stray too far from the median, mean, or similar
 
 /**
  * OscPlayer that replaces input VMC timing messages with its own VMC timing messages that continue to increment over
@@ -33,70 +18,35 @@ import java.util.stream.Collectors;
  */
 public class VmcPlayer extends OscPlayer {
     public static final String VMC_TIMING_ADDRESS = "/VMC/Ext/T";
-    // Period for timing messages
-    // VSeeFace seems to aim for a period of 60Hz (1/60 seconds), other programs could vary
-    // We can't do an accurate repeating of 1/60th of a second since we can only schedule a period of milliseconds
-    // 167ms repeating would soon get out of sync of the target value 166.66666666666 recurring, all the tasks would
-    // have to be scheduled in advance for the closest millisecond values to 1000/60, 2000/60, 3000/60 etc up to a full
-    // second at 60000/60 (though since 3000/60 is a whole number of milliseconds we could do something with repeating
-    // in a cycle of 3 tasks
-    // --
-    // As of VMC V2.3, the update period is set by the Marionette with
-    // /VMC/Ext/Set/Period (int){Status} (int){Root} (int){Bone} (int){BlendShape} (int){Camera} (int){Devices}
-    // sent to the Performer. Does VSeeFace even send messages to the Performer?
-    private static final long TIMING_PERIOD_MILLIS = 100;
-    private static final Predicate<RecordedMessage> IS_NOT_TIMING_MESSAGE =
-            recordedMessage -> !recordedMessage.getAddress().equals(VMC_TIMING_ADDRESS);
+
+    private static final Function<RecordedMessage, RecordedMessage> TIMING_MESSAGE_MAPPER =
+            recordedMessage -> {
+                if (recordedMessage.getAddress().equals(VMC_TIMING_ADDRESS)) {
+                    return VmcTimingMessage.SINGLETON;
+                } else {
+                    return recordedMessage;
+                }
+            };
 
     public VmcPlayer(int portOut, List<RecordedPacket<?, ?>> recordedMessages, long repeatPeriodMillis) throws IOException {
-        super(portOut, filterTimingMessages(recordedMessages), repeatPeriodMillis);
+        super(portOut, replaceTimingMessages(recordedMessages), repeatPeriodMillis);
     }
 
     public VmcPlayer(int portOut, List<RecordedPacket<?, ?>> recordedMessages) throws IOException {
-        super(portOut, filterTimingMessages(recordedMessages));
+        super(portOut, replaceTimingMessages(recordedMessages));
     }
 
     public VmcPlayer(SocketAddress socketAddress, List<RecordedPacket<?, ?>> recordedMessages, long repeatPeriodMillis) throws IOException {
-        super(socketAddress, filterTimingMessages(recordedMessages), repeatPeriodMillis);
+        super(socketAddress, replaceTimingMessages(recordedMessages), repeatPeriodMillis);
     }
 
     public VmcPlayer(SocketAddress socketAddress, List<RecordedPacket<?, ?>> recordedMessages) throws IOException {
-        super(socketAddress, filterTimingMessages(recordedMessages));
+        super(socketAddress, replaceTimingMessages(recordedMessages));
     }
 
-    private static List<RecordedPacket<?, ?>> filterTimingMessages(List<RecordedPacket<?, ?>> inputMessages) {
+    private static List<RecordedPacket<?, ?>> replaceTimingMessages(List<RecordedPacket<?, ?>> inputMessages) {
         return inputMessages.stream()
-                .map(recordedPacket -> recordedPacket.filter(IS_NOT_TIMING_MESSAGE))
-                .filter(Objects::nonNull)
+                .map(recordedPacket -> recordedPacket.mapMessages(TIMING_MESSAGE_MAPPER))
                 .collect(Collectors.toList());
-    }
-
-    @Override
-    protected void addRecordedMessages() {
-        this.scheduleTask(new VmcTimingTimerTask(this.oscPortOut), 0, TIMING_PERIOD_MILLIS);
-        super.addRecordedMessages();
-    }
-
-    private static class VmcTimingTimerTask extends TimerTask {
-
-        private final OSCPortOut portOut;
-        private final OSCMessageInfo oscMessageInfo = new OSCMessageInfo("f");
-        private long time = 0;
-
-        VmcTimingTimerTask(OSCPortOut portOut) {
-            this.portOut = portOut;
-        }
-
-        @Override
-        public void run() {
-            float time = this.time / 1000f;
-            OSCMessage message = new OSCMessage(VMC_TIMING_ADDRESS, Collections.singletonList(time), this.oscMessageInfo);
-            this.time += TIMING_PERIOD_MILLIS;
-            try {
-                portOut.send(message);
-            } catch (IOException | OSCSerializeException e) {
-                throw new RuntimeException(e);
-            }
-        }
     }
 }

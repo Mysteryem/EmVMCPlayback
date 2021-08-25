@@ -3,6 +3,7 @@ package uk.co.mysterymayhem.vmcplayback.osc;
 import com.illposed.osc.OSCMessage;
 
 import java.io.Serializable;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -29,5 +30,15 @@ public class RecordedMessagePacket extends RecordedPacket<RecordedMessagePacket,
         } else {
             return null;
         }
+    }
+
+    @Override
+    public RecordedMessagePacket mapMessages(Function<RecordedMessage, RecordedMessage> mapper) {
+        RecordedMessage packetData = this.getPacketData();
+        RecordedMessage newPacketData = mapper.apply(packetData);
+        if (!packetData.equals(newPacketData)) {
+            this.setPacketData(newPacketData);
+        }
+        return this;
     }
 }

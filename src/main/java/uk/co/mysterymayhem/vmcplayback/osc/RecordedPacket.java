@@ -4,6 +4,7 @@ import com.illposed.osc.OSCPacket;
 
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -18,7 +19,7 @@ public abstract class RecordedPacket<T extends RecordedPacket<T, U> & Serializab
     private static final long serialVersionUID = 1L;
 
     private final long offsetTime;
-    private final U packetData;
+    private U packetData;
 
     public RecordedPacket(long offsetTime, U packetData) {
         this.offsetTime = offsetTime;
@@ -33,24 +34,29 @@ public abstract class RecordedPacket<T extends RecordedPacket<T, U> & Serializab
         return packetData;
     }
 
+    protected void setPacketData(U newPacketData) {
+        this.packetData = newPacketData;
+    }
+
     @Override
     public boolean equals(Object o) {
-
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        RecordedPacket that = (RecordedPacket) o;
-        return offsetTime == that.offsetTime;
+        RecordedPacket<?, ?> that = (RecordedPacket<?, ?>) o;
+        return offsetTime == that.offsetTime &&
+                Objects.equals(packetData, that.packetData);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(offsetTime);
+        return Objects.hash(offsetTime, packetData);
     }
 
     @Override
     public String toString() {
         return "RecordedPacket{" +
                 "offsetTime=" + offsetTime +
+                ", packetData=" + packetData +
                 '}';
     }
 
@@ -74,5 +80,15 @@ public abstract class RecordedPacket<T extends RecordedPacket<T, U> & Serializab
 
     protected U filterData(Predicate<RecordedMessage> messagePredicate) {
         return this.getPacketData().filter(messagePredicate);
+    }
+
+    @SuppressWarnings("unchecked")
+    public T mapMessages(Function<RecordedMessage, RecordedMessage> mapper) {
+        U packetData = this.getPacketData();
+        U mapped = packetData.mapMessages(mapper);
+        if (Objects.equals(packetData, mapped)) {
+            this.setPacketData(mapped);
+        }
+        return (T)this;
     }
 }

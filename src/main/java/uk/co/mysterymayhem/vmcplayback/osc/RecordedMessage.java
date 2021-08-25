@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -72,6 +73,11 @@ public class RecordedMessage implements RecordedPacketData<RecordedMessage>, Ser
         } else {
             return null;
         }
+    }
+
+    @Override
+    public RecordedMessage mapMessages(Function<RecordedMessage, RecordedMessage> mapper) {
+        return mapper.apply(this);
     }
 
     @Override

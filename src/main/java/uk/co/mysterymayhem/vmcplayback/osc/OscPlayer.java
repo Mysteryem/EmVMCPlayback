@@ -109,7 +109,7 @@ public class OscPlayer {
     protected void addRecordedMessages() {
         // It might be better to map entirely first and then schedule the tasks
         this.recordedPackets.stream()
-                .map(recordedMessage -> new RecordedPacketTimerTask(recordedMessage, this.oscPortOut))
+                .map(recordedPacket -> new RecordedPacketTimerTask(recordedPacket, this.oscPortOut))
                 .forEach(rmtt -> this.scheduleTask(rmtt, rmtt.getDelayMillis(), this.repeatPeriod));
     }
 

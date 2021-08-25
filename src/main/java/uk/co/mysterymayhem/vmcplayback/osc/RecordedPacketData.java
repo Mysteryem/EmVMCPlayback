@@ -2,6 +2,7 @@ package uk.co.mysterymayhem.vmcplayback.osc;
 
 import com.illposed.osc.OSCPacket;
 
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -33,4 +34,6 @@ public interface RecordedPacketData<T extends RecordedPacketData<T>> {
      * all messages pass the filter. If all messages get filtered, returns null.
      */
     T filter(Predicate<RecordedMessage> messagePredicate);
+
+    T mapMessages(Function<RecordedMessage, RecordedMessage> mapper);
 }

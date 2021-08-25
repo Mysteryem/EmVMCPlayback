@@ -7,6 +7,7 @@ import com.illposed.osc.OSCPacket;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -33,8 +34,8 @@ public class RecordedBundlePacket extends RecordedPacket<RecordedBundlePacket, R
         }
     }
 
-    // Not used at the moment as the only time RecordedBundlePackets are created outside of this class and not from OSC
-    // classes is from deserialization
+    // Not used at the moment. The only time RecordedBundlePackets are created outside of this class, and not from OSC
+    // classes, is from deserialization
     public static RecordedBundlePacket fromData(long offsetTime, long ntpTime, List<RecordedPacketData<?>> recordedPacketData, Predicate<RecordedMessage> messagePredicate) {
         recordedPacketData = recordedPacketData.stream().map(data -> data.filter(messagePredicate)).filter(Objects::nonNull).collect(Collectors.toList());
         if (recordedPacketData.isEmpty()) {
@@ -52,6 +53,13 @@ public class RecordedBundlePacket extends RecordedPacket<RecordedBundlePacket, R
         } else {
             return null;
         }
+    }
+
+    @Override
+    public RecordedBundlePacket mapMessages(Function<RecordedMessage, RecordedMessage> mapper) {
+        RecordedBundle recordedBundle = this.getPacketData();
+        this.setPacketData(recordedBundle.mapMessages(mapper));
+        return this;
     }
 
     private static class OscConverter {

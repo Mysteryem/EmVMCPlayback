@@ -7,6 +7,7 @@ import com.illposed.osc.argument.OSCTimeTag64;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -63,5 +64,37 @@ public class RecordedBundle implements RecordedPacketData<RecordedBundle>, Seria
         } else {
             return new RecordedBundle(this.ntpTime, filteredData);
         }
+    }
+
+    @Override
+    public RecordedBundle mapMessages(Function<RecordedMessage, RecordedMessage> mapper) {
+        List<RecordedPacketData<?>> mapped =
+                this.getRecordedPacketData()
+                        .stream()
+                        .map(datum -> datum.mapMessages(mapper))
+                        .collect(Collectors.toList());
+        return new RecordedBundle(this.getNtpTime(), mapped);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        RecordedBundle that = (RecordedBundle) o;
+        return ntpTime == that.ntpTime &&
+                Objects.equals(recordedPacketData, that.recordedPacketData);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(ntpTime, recordedPacketData);
+    }
+
+    @Override
+    public String toString() {
+        return "RecordedBundle{" +
+                "ntpTime=" + ntpTime +
+                ", recordedPacketData=" + recordedPacketData +
+                '}';
     }
 }
